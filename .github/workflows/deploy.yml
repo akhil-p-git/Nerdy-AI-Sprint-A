@@ -47,9 +47,15 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2'
-          bundler-cache: true
+          ruby-version: '3.2.9'
           working-directory: backend
+
+      - name: Install Ruby dependencies
+        working-directory: backend
+        run: |
+          gem install bundler -v 2.4.19
+          bundle config set --local without 'development'
+          bundle install --jobs 4 --retry 3
 
       - name: Set up Node
         uses: actions/setup-node@v4
