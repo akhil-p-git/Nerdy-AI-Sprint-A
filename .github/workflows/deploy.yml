@@ -1,63 +1,18 @@
-name: Deploy to Production
+name: CI
 
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
-
-env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY_API: nerdy-ai-api
-  ECR_REPOSITORY_FRONTEND: nerdy-ai-frontend
-  ECS_CLUSTER: nerdy-ai-cluster
-  ECS_SERVICE_API: nerdy-ai-api
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
-    # Services commented out - not needed for frontend-only tests
-    # services:
-    #   postgres:
-    #     image: pgvector/pgvector:pg15
-    #     env:
-    #       POSTGRES_USER: test
-    #       POSTGRES_PASSWORD: test
-    #       POSTGRES_DB: nerdy_ai_test
-    #     ports:
-    #       - 5432:5432
-    #     options: >-
-    #       --health-cmd pg_isready
-    #       --health-interval 10s
-    #       --health-timeout 5s
-    #       --health-retries 5
-    #
-    #   redis:
-    #     image: redis:7-alpine
-    #     ports:
-    #       - 6379:6379
-    #     options: >-
-    #       --health-cmd "redis-cli ping"
-    #       --health-interval 10s
-    #       --health-timeout 5s
-    #       --health-retries 5
-
     steps:
       - uses: actions/checkout@v4
-
-      # Ruby setup commented out - not needed for frontend-only tests
-      # - name: Set up Ruby
-      #   uses: ruby/setup-ruby@v1
-      #   with:
-      #     ruby-version: '3.2.9'
-      #     working-directory: backend
-      #
-      # - name: Install Ruby dependencies
-      #   working-directory: backend
-      #   run: |
-      #     gem install bundler -v 2.4.19
-      #     bundle config set --local without 'development'
-      #     bundle install --jobs 4 --retry 3
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -66,91 +21,20 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      # Backend tests temporarily skipped due to Rails 8 eager loading issues
-      # TODO: Fix Rails 8 compatibility in test environment
-      # - name: Run Backend Tests
-      #   working-directory: backend
-      #   env:
-      #     RAILS_ENV: test
-      #     DATABASE_URL: postgres://test:test@localhost:5432/nerdy_ai_test
-      #     REDIS_URL: redis://localhost:6379/0
-      #   run: |
-      #     bundle exec rails db:prepare
-      #     bundle exec rspec --format progress
-
       - name: Run Frontend Tests
         working-directory: frontend
         run: |
           npm ci
           npm run test -- --run
 
-      - name: Upload Coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: backend/coverage/coverage.xml,frontend/coverage/lcov.info
-
-  build-and-deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    # Only run if on main branch AND AWS credentials are configured
-    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push API image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_API:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY_API:latest \
-            -f backend/Dockerfile.production backend
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY_API:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY_API:latest
-
-      - name: Build and push Frontend image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest \
-            --build-arg VITE_API_URL=${{ secrets.VITE_API_URL }} \
-            --build-arg VITE_WS_URL=${{ secrets.VITE_WS_URL }} \
-            -f frontend/Dockerfile.production frontend
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
-
-      - name: Deploy to ECS
-        run: |
-          aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE_API --force-new-deployment
-
-      - name: Invalidate CloudFront
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/*"
-
-      - name: Notify Slack
-        if: always()
-        continue-on-error: true
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          fields: repo,message,commit,author,action,eventName,ref,workflow
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-
+  # Uncomment and configure when ready to deploy to AWS
+  # build-and-deploy:
+  #   needs: test
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   # Requires these secrets:
+  #   # - AWS_ACCESS_KEY_ID
+  #   # - AWS_SECRET_ACCESS_KEY
+  #   # - CLOUDFRONT_DISTRIBUTION_ID
+  #   # - VITE_API_URL
+  #   # - VITE_WS_URL
