@@ -1,0 +1,21 @@
+FROM ruby:3.2-bookworm
+
+WORKDIR /app
+
+RUN apt-get clean && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY Gemfile ./
+RUN bundle lock --add-platform aarch64-linux && bundle install
+
+COPY . .
+
+EXPOSE 3003
+
+CMD ["bundle", "exec", "rails", "server", "-p", "3003", "-b", "0.0.0.0"]

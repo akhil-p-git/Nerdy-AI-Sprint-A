@@ -1,0 +1,4 @@
+class SecurityAuditLog < ApplicationRecord
+end
+
+

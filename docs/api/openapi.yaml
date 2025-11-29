@@ -1,0 +1,929 @@
+openapi: 3.0.3
+info:
+  title: Nerdy AI Study Companion API
+  description: |
+    API for the AI Study Companion - a persistent AI tutor that lives between tutoring sessions.
+
+    ## Authentication
+    All authenticated endpoints require a JWT token in the Authorization header:
+    ```
+    Authorization: Bearer <token>
+    ```
+
+    ## Rate Limits
+    - Standard endpoints: 100 requests/minute
+    - AI conversation endpoints: 20 requests/minute
+    - Authentication endpoints: 10 requests/minute
+
+    ## WebSocket Connections
+    Real-time streaming uses ActionCable WebSocket connections.
+    Connect to `/cable` with the auth token as a query parameter.
+  version: 1.0.0
+  contact:
+    name: Nerdy AI Support
+    email: support@nerdy.com
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.nerdy-ai.com/api/v1
+    description: Production server
+  - url: https://staging-api.nerdy-ai.com/api/v1
+    description: Staging server
+  - url: http://localhost:3000/api/v1
+    description: Local development
+
+tags:
+  - name: Authentication
+    description: User registration and login
+  - name: Learning Profiles
+    description: Student learning profile management
+  - name: Goals
+    description: Learning goal tracking
+  - name: Conversations
+    description: AI conversation management
+  - name: Messages
+    description: Chat messages and AI responses
+  - name: Practice
+    description: Practice sessions and questions
+  - name: Analytics
+    description: Learning analytics and statistics
+  - name: Parent Dashboard
+    description: Parent monitoring and controls
+
+paths:
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new user
+      description: Create a new student account
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: student@example.com
+              password: securePassword123
+              password_confirmation: securePassword123
+              name: John Doe
+              grade_level: 10
+              parent_email: parent@example.com
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: User login
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /learning_profiles:
+    get:
+      tags: [Learning Profiles]
+      summary: Get current user's learning profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Learning profile retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningProfile'
+
+    put:
+      tags: [Learning Profiles]
+      summary: Update learning profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearningProfileUpdate'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningProfile'
+
+  /goals:
+    get:
+      tags: [Goals]
+      summary: List all goals
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, completed, paused]
+        - name: subject
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Goals list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  goals:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Goal'
+
+    post:
+      tags: [Goals]
+      summary: Create a new goal
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalCreate'
+      responses:
+        '201':
+          description: Goal created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+
+  /goals/{id}:
+    get:
+      tags: [Goals]
+      summary: Get goal details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Goal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+
+    put:
+      tags: [Goals]
+      summary: Update goal
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalUpdate'
+      responses:
+        '200':
+          description: Goal updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+
+    delete:
+      tags: [Goals]
+      summary: Delete goal
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Goal deleted
+
+  /conversations:
+    get:
+      tags: [Conversations]
+      summary: List conversations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: subject
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: before
+          in: query
+          description: Cursor for pagination
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Conversations list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConversationSummary'
+                  next_cursor:
+                    type: string
+
+    post:
+      tags: [Conversations]
+      summary: Start a new conversation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationCreate'
+      responses:
+        '201':
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+
+  /conversations/{id}/messages:
+    post:
+      tags: [Messages]
+      summary: Send a message and get AI response
+      description: |
+        Sends a message to the AI and receives a streaming response.
+        For real-time streaming, use the WebSocket channel instead.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageCreate'
+      responses:
+        '200':
+          description: AI response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /practice/sessions:
+    post:
+      tags: [Practice]
+      summary: Start a practice session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PracticeSessionCreate'
+      responses:
+        '201':
+          description: Practice session started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSession'
+
+  /practice/sessions/{id}/questions/{question_id}/answer:
+    post:
+      tags: [Practice]
+      summary: Submit answer to a practice question
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: question_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnswerSubmit'
+      responses:
+        '200':
+          description: Answer evaluated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnswerResult'
+
+  /stats/summary:
+    get:
+      tags: [Analytics]
+      summary: Get learning statistics summary
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [week, month, all_time]
+            default: week
+      responses:
+        '200':
+          description: Statistics summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsSummary'
+
+  /parent/students:
+    get:
+      tags: [Parent Dashboard]
+      summary: List linked student accounts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Student accounts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  students:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StudentSummary'
+
+  /parent/students/{id}/activity:
+    get:
+      tags: [Parent Dashboard]
+      summary: Get student activity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 7
+            maximum: 30
+      responses:
+        '200':
+          description: Student activity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentActivity'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - password_confirmation
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        password_confirmation:
+          type: string
+        name:
+          type: string
+          maxLength: 100
+        grade_level:
+          type: integer
+          minimum: 1
+          maximum: 12
+        parent_email:
+          type: string
+          format: email
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+        expires_at:
+          type: string
+          format: date-time
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [student, parent, admin]
+        grade_level:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    LearningProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        subjects:
+          type: array
+          items:
+            type: string
+        learning_style:
+          type: string
+          enum: [visual, auditory, reading, kinesthetic]
+        strengths:
+          type: array
+          items:
+            type: string
+        areas_for_improvement:
+          type: array
+          items:
+            type: string
+        preferred_session_length:
+          type: integer
+          description: Preferred session length in minutes
+        updated_at:
+          type: string
+          format: date-time
+
+    LearningProfileUpdate:
+      type: object
+      properties:
+        subjects:
+          type: array
+          items:
+            type: string
+        learning_style:
+          type: string
+          enum: [visual, auditory, reading, kinesthetic]
+        preferred_session_length:
+          type: integer
+          minimum: 5
+          maximum: 120
+
+    Goal:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        subject:
+          type: string
+        target_score:
+          type: number
+        current_score:
+          type: number
+        status:
+          type: string
+          enum: [active, completed, paused]
+        target_date:
+          type: string
+          format: date
+        progress_percentage:
+          type: number
+        milestones:
+          type: array
+          items:
+            $ref: '#/components/schemas/Milestone'
+        created_at:
+          type: string
+          format: date-time
+
+    GoalCreate:
+      type: object
+      required:
+        - title
+        - subject
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+        subject:
+          type: string
+        target_score:
+          type: number
+        target_date:
+          type: string
+          format: date
+
+    GoalUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        target_score:
+          type: number
+        target_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [active, completed, paused]
+
+    Milestone:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        completed:
+          type: boolean
+        completed_at:
+          type: string
+          format: date-time
+
+    ConversationSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        subject:
+          type: string
+        topic:
+          type: string
+        message_count:
+          type: integer
+        last_message_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        subject:
+          type: string
+        topic:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        created_at:
+          type: string
+          format: date-time
+
+    ConversationCreate:
+      type: object
+      required:
+        - subject
+      properties:
+        subject:
+          type: string
+        topic:
+          type: string
+        initial_message:
+          type: string
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    MessageCreate:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          maxLength: 10000
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          $ref: '#/components/schemas/Message'
+        tokens_used:
+          type: integer
+        goal_progress:
+          type: object
+          description: Any goal progress detected from this message
+
+    PracticeSessionCreate:
+      type: object
+      required:
+        - subject
+      properties:
+        subject:
+          type: string
+        topic:
+          type: string
+        question_count:
+          type: integer
+          default: 10
+          minimum: 5
+          maximum: 50
+        difficulty:
+          type: string
+          enum: [easy, medium, hard, adaptive]
+          default: adaptive
+
+    PracticeSession:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        subject:
+          type: string
+        topic:
+          type: string
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Question'
+        current_index:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+
+    Question:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [multiple_choice, short_answer, true_false]
+        content:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+
+    AnswerSubmit:
+      type: object
+      required:
+        - answer
+      properties:
+        answer:
+          type: string
+        time_spent_seconds:
+          type: integer
+
+    AnswerResult:
+      type: object
+      properties:
+        correct:
+          type: boolean
+        correct_answer:
+          type: string
+        explanation:
+          type: string
+        next_question:
+          $ref: '#/components/schemas/Question'
+        session_complete:
+          type: boolean
+
+    StatsSummary:
+      type: object
+      properties:
+        study_time_minutes:
+          type: integer
+        messages_sent:
+          type: integer
+        practice_sessions_completed:
+          type: integer
+        questions_answered:
+          type: integer
+        accuracy_percentage:
+          type: number
+        goals_completed:
+          type: integer
+        streak_days:
+          type: integer
+        subjects_activity:
+          type: array
+          items:
+            type: object
+            properties:
+              subject:
+                type: string
+              time_minutes:
+                type: integer
+              accuracy:
+                type: number
+
+    StudentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        grade_level:
+          type: integer
+        last_active_at:
+          type: string
+          format: date-time
+        weekly_study_minutes:
+          type: integer
+        active_goals_count:
+          type: integer
+
+    StudentActivity:
+      type: object
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        daily_activity:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              study_minutes:
+                type: integer
+              sessions_count:
+                type: integer
+        recent_sessions:
+          type: array
+          items:
+            type: object
+            properties:
+              subject:
+                type: string
+              duration_minutes:
+                type: integer
+              timestamp:
+                type: string
+                format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+
+
