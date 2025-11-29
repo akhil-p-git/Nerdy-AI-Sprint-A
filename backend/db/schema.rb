@@ -52,9 +52,18 @@ ActiveRecord::Schema[8.1].define(version: 2025_11_27_000019) do
     t.index ["student_id"], name: "index_conversations_on_student_id"
   end
 
-# Could not dump table "knowledge_nodes" because of following StandardError
-#   Unknown type 'vector(1536)' for column 'embedding'
-
+  create_table "knowledge_nodes", force: :cascade do |t|
+    t.bigint "student_id", null: false
+    t.string "source_type"
+    t.bigint "source_id"
+    t.string "subject"
+    t.string "topic"
+    t.text "content"
+    t.jsonb "metadata", default: {}
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["student_id"], name: "index_knowledge_nodes_on_student_id"
+  end
 
   create_table "learning_goals", force: :cascade do |t|
     t.datetime "completed_at"
