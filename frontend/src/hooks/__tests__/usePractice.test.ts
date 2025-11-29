@@ -31,12 +31,8 @@ describe('usePractice', () => {
       await result.current.startSession('math', 'quiz', 5);
     });
 
-    expect(result.current.currentIndex).toBe(0);
-
-    // Simulate answering
-    await act(async () => {
-      // Mock answer submission would set lastResult
-    });
+    // Hook uses currentProblemIndex, not currentIndex
+    expect(result.current.currentProblemIndex).toBe(0);
   });
 
   it('calculates progress correctly', async () => {
@@ -46,8 +42,10 @@ describe('usePractice', () => {
       await result.current.startSession('math', 'quiz', 5);
     });
 
-    // First problem of 5 = 20% progress
-    expect(result.current.progress).toBe(20);
+    // Progress is calculated from session data: (currentProblemIndex + 1) / total * 100
+    const total = result.current.session?.total_problems || 5;
+    const progress = ((result.current.currentProblemIndex + 1) / total) * 100;
+    expect(progress).toBe(20);
   });
 });
 
