@@ -92,7 +92,8 @@ jobs:
   build-and-deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Only run if on main branch AND AWS credentials are configured
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -144,6 +145,7 @@ jobs:
 
       - name: Notify Slack
         if: always()
+        continue-on-error: true
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
